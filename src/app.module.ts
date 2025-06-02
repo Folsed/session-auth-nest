@@ -1,10 +1,45 @@
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { MiddlewareConsumer, Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { DatabaseModule } from './database/database.module';
+import { UsersModule } from './modules/users/users.module';
+import { DataSource } from 'typeorm';
+import * as connectPgSimple from 'connect-pg-simple';
+import * as session from 'express-session';
+import { parseMaxAgeToMsUtil } from './common/utils/parseMaxAgeToMs.util';
+import { isProd } from './common/utils/env.util';
 
 @Module({
-    imports: [ConfigModule.forRoot({ isGlobal: true }), DatabaseModule],
+    imports: [ConfigModule.forRoot({ isGlobal: true }), DatabaseModule, UsersModule],
     controllers: [],
     providers: []
 })
-export class AppModule {}
+export class AppModule {
+    constructor(
+        private readonly dataSource: DataSource,
+        private readonly configService: ConfigService
+    ) {}
+
+    configure(consumer: MiddlewareConsumer) {
+        const PgSession = connectPgSimple(session);
+
+        consumer
+            .apply(
+                session({
+                    store: new PgSession({
+                        pool: this.dataSource.driver['master'],
+                        tableName: 'user_sessions'
+                    }),
+                    secret: this.configService.get<string>('SESSION_SECRET'),
+                    resave: false,
+                    saveUninitialized: false,
+                    cookie: {
+                        httpOnly: true,
+                        maxAge: parseMaxAgeToMsUtil(this.configService.get<string>('SESSION_MAX_AGE')),
+                        sameSite: 'lax',
+                        secure: isProd(this.configService)
+                    }
+                })
+            )
+            .forRoutes('*');
+    }
+}
