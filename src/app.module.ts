@@ -7,9 +7,10 @@ import * as connectPgSimple from 'connect-pg-simple';
 import * as session from 'express-session';
 import { parseMaxAgeToMsUtil } from './common/utils/parseMaxAgeToMs.util';
 import { isProd } from './common/utils/env.util';
+import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
-    imports: [ConfigModule.forRoot({ isGlobal: true }), DatabaseModule, UsersModule],
+    imports: [ConfigModule.forRoot({ isGlobal: true }), DatabaseModule, UsersModule, AuthModule],
     controllers: [],
     providers: []
 })
@@ -25,9 +26,11 @@ export class AppModule {
         consumer
             .apply(
                 session({
+                    name: '_sess.id.connect',
                     store: new PgSession({
                         pool: this.dataSource.driver['master'],
-                        tableName: 'user_sessions'
+                        tableName: 'user_sessions',
+                        createTableIfMissing: true
                     }),
                     secret: this.configService.get<string>('SESSION_SECRET'),
                     resave: false,
